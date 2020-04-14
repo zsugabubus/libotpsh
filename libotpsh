@@ -1,0 +1,56 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+hotp() {
+	# https://tools.ietf.org/html/rfc4226
+	hmac=$(
+		printf %16s $(dc -e "16o ${1?Missing counter} p") |
+		tr ' ' '0' |
+		basenc --decode --base16 |
+		openssl dgst "-${OTP_ALGORITHM:-sha1}" -hmac "${OTP_SECRET?OTP secret missing}" |
+		cut -d' ' -f2 |
+		tr a-z A-Z
+	)
+	unset OTP_SECRET
+	hotp=$(dc -e "10 ${OTP_DIGITS:-6} ^ 16 i $hmac 2 10 $hmac 10 % - 8 * ^ / 80000000 % r% p")
+	printf "%0${OTP_DIGITS:-6}d\n" $hotp
+	unset hmac
+}
+
+totp() {
+	# https://tools.ietf.org/html/rfc6238
+	counter=$(( $(date --date "${1:-now}" +%s) / ${OTP_PERIOD:-30} ))
+	hotp "$counter"
+	unset counter
+}
+
+otpauth() {
+  url=${1#otpauth://}
+  if test "$url" = "$1"; then
+    printf >&2 'Invalid oauth URL: %s' "$1"
+    return 1
+  fi
+
+  type=${url%%/*}
+  case "$type" in
+  totp|hotp) ;;
+  *)
+    printf >&2 'Invalid type: %s' "$type"
+    return 1 ;;
+  esac
+
+  params="&${url#*?}"
+
+  secret=${params#*secret=}
+  OTP_SECRET=$(printf %s "${secret%%&*}" | base32 -d)
+
+  algorithm=${params#*algorithm=}
+  OTP_ALGORITHM=${algorithm%%&*}
+
+  period=${params#*period=}
+  OTP_PERIOD=${period%%&*}
+
+  digits=${params#*digits=}
+  OTP_DIGITS=${digits%%&*}
+
+  $type
+}
+# vi:set ft=sh:
