@@ -5,21 +5,21 @@ hotp() {
 		printf %16s $(dc -e "16o ${1?Missing counter} p") |
 		tr ' ' '0' |
 		basenc --decode --base16 |
-		openssl dgst "-${OTP_ALGORITHM:-sha1}" -hmac "${OTP_SECRET?OTP secret missing}" |
+		openssl dgst "-${otp_algorithm:-sha1}" -hmac "${otp_secret?OTP secret missing}" |
 		cut -d' ' -f2 |
 		tr a-z A-Z
 	)
-	unset OTP_SECRET
-	hotp=$(dc -e "10 ${OTP_DIGITS:-6} ^ 16 i $hmac 2 10 $hmac 10 % - 8 * ^ / 80000000 % r% p")
-	printf "%0${OTP_DIGITS:-6}d\n" $hotp
+	unset otp_secret
+	hotp=$(dc -e "10 ${otp_digits:-6} ^ 16 i $hmac 2 10 $hmac 10 % - 8 * ^ / 80000000 % r% p")
+	printf "%0${otp_digits:-6}d\n" $hotp
 	unset hmac
 }
 
 totp() {
 	# https://tools.ietf.org/html/rfc6238
-	counter=$(( $(date --date "${1:-now}" +%s) / ${OTP_PERIOD:-30} ))
-	hotp "$counter"
-	unset counter
+	otp_counter=$(( $(date --date "${1:-now}" +%s) / ${otp_period:-30} ))
+	hotp "$otp_counter"
+	unset otp_counter
 }
 
 otpauth() {
@@ -39,17 +39,17 @@ otpauth() {
 
   params="&${url#*?}"
 
-  secret=${params#*secret=}
-  OTP_SECRET=$(printf %s "${secret%%&*}" | base32 -d)
+  otp_secret=${params#*secret=}
+  otp_secret=$(printf %s "${otp_secret%%&*}" | tr a-z A-Z | base32 --decode)
 
-  algorithm=${params#*algorithm=}
-  OTP_ALGORITHM=${algorithm%%&*}
+  otp_algorithm=${params#*algorithm=}
+  otp_algorithm=${otp_algorithm%%&*}
 
-  period=${params#*period=}
-  OTP_PERIOD=${period%%&*}
+  otp_period=${params#*period=}
+  otp_period=${otp_period%%&*}
 
-  digits=${params#*digits=}
-  OTP_DIGITS=${digits%%&*}
+  otp_digits=${params#*digits=}
+  otp_digits=${otp_digits%%&*}
 
   $type
 }
